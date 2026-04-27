@@ -46,6 +46,7 @@ func runSchema(db *sql.DB) error {
 			conversation_id INTEGER NOT NULL REFERENCES conversations(conversation_id),
 			role            TEXT NOT NULL,
 			content         TEXT NOT NULL DEFAULT '',
+			reasoning_content TEXT NOT NULL DEFAULT '',
 			token_count     INTEGER NOT NULL DEFAULT 0,
 			created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 		)`,
@@ -156,6 +157,43 @@ func runSchema(db *sql.DB) error {
 		if _, err := db.Exec(s); err != nil {
 			return err
 		}
+	}
+
+	if err := ensureMessagesReasoningContentColumn(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureMessagesReasoningContentColumn(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(messages)`)
+	if err != nil {
+		return fmt.Errorf("inspect messages schema: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			columnType string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultVal, &pk); err != nil {
+			return fmt.Errorf("scan messages schema: %w", err)
+		}
+		if name == "reasoning_content" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate messages schema: %w", err)
+	}
+
+	if _, err := db.Exec(`ALTER TABLE messages ADD COLUMN reasoning_content TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("add messages.reasoning_content: %w", err)
 	}
 	return nil
 }

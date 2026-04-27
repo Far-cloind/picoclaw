@@ -253,9 +253,23 @@ func (e *Engine) Ingest(ctx context.Context, sessionKey string, messages []Messa
 		var added *Message
 		var err error
 		if len(msg.Parts) > 0 {
-			added, err = e.store.AddMessageWithParts(ctx, conv.ConversationID, msg.Role, msg.Parts, msg.TokenCount)
+			added, err = e.store.AddMessageWithPartsAndReasoning(
+				ctx,
+				conv.ConversationID,
+				msg.Role,
+				msg.Parts,
+				msg.ReasoningContent,
+				msg.TokenCount,
+			)
 		} else {
-			added, err = e.store.AddMessage(ctx, conv.ConversationID, msg.Role, msg.Content, msg.TokenCount)
+			added, err = e.store.AddMessageWithReasoning(
+				ctx,
+				conv.ConversationID,
+				msg.Role,
+				msg.Content,
+				msg.ReasoningContent,
+				msg.TokenCount,
+			)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("add message: %w", err)
@@ -539,6 +553,9 @@ func truncate(s string, maxLen int) string {
 // since AddMessageWithParts stores empty Content in DB.
 func messageMatches(a, b Message) bool {
 	if a.Role != b.Role {
+		return false
+	}
+	if a.ReasoningContent != b.ReasoningContent {
 		return false
 	}
 	// If either message has Parts, compare Parts

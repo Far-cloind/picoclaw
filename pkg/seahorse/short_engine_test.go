@@ -320,6 +320,29 @@ func TestEngineIngestWithParts(t *testing.T) {
 	}
 }
 
+func TestEngineIngestPreservesReasoningContent(t *testing.T) {
+	eng := newTestEngine(t)
+	ctx := context.Background()
+
+	msgs := []Message{
+		{Role: "assistant", Content: "visible", ReasoningContent: "hidden", TokenCount: 10},
+	}
+
+	_, err := eng.Ingest(ctx, "agent:reasoning-test", msgs)
+	if err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+
+	conv, _ := eng.store.GetOrCreateConversation(ctx, "agent:reasoning-test")
+	stored, _ := eng.store.GetMessages(ctx, conv.ConversationID, 10, 0)
+	if len(stored) != 1 {
+		t.Fatalf("stored messages = %d, want 1", len(stored))
+	}
+	if stored[0].ReasoningContent != "hidden" {
+		t.Fatalf("ReasoningContent = %q, want %q", stored[0].ReasoningContent, "hidden")
+	}
+}
+
 func TestEngineIngestAssemblePreservesParts(t *testing.T) {
 	eng := newTestEngine(t)
 	ctx := context.Background()
@@ -716,6 +739,37 @@ func TestBootstrapSameContentDifferentTokenCountNoRebuild(t *testing.T) {
 			t.Errorf("message %d ID changed: before=%d, after=%d (should be no-op)",
 				i, storedBefore[i].ID, storedAfter[i].ID)
 		}
+	}
+}
+
+func TestBootstrapReasoningContentMismatchRebuilds(t *testing.T) {
+	e := newTestEngine(t)
+	ctx := context.Background()
+	sessionKey := "test-bootstrap-reasoning-diff"
+
+	initialMsgs := []Message{
+		{Role: "assistant", Content: "visible", TokenCount: 3},
+	}
+	err := e.Bootstrap(ctx, sessionKey, initialMsgs)
+	if err != nil {
+		t.Fatalf("first Bootstrap: %v", err)
+	}
+
+	updatedMsgs := []Message{
+		{Role: "assistant", Content: "visible", ReasoningContent: "hidden thought", TokenCount: 6},
+	}
+	err = e.Bootstrap(ctx, sessionKey, updatedMsgs)
+	if err != nil {
+		t.Fatalf("second Bootstrap: %v", err)
+	}
+
+	conv, _ := e.store.GetOrCreateConversation(ctx, sessionKey)
+	stored, _ := e.store.GetMessages(ctx, conv.ConversationID, 10, 0)
+	if len(stored) != 1 {
+		t.Fatalf("stored messages = %d, want 1", len(stored))
+	}
+	if stored[0].ReasoningContent != "hidden thought" {
+		t.Fatalf("ReasoningContent = %q, want %q", stored[0].ReasoningContent, "hidden thought")
 	}
 }
 

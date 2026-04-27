@@ -91,6 +91,57 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunMigrationsAddsReasoningContentColumnToExistingMessagesTable(t *testing.T) {
+	db := openTestDB(t)
+
+	_, err := db.Exec(`CREATE TABLE messages (
+		message_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+		conversation_id INTEGER NOT NULL,
+		role            TEXT NOT NULL,
+		content         TEXT NOT NULL DEFAULT '',
+		token_count     INTEGER NOT NULL DEFAULT 0,
+		created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+	)`)
+	if err != nil {
+		t.Fatalf("create legacy messages table: %v", err)
+	}
+
+	if err := runSchema(db); err != nil {
+		t.Fatalf("runSchema: %v", err)
+	}
+
+	rows, err := db.Query(`PRAGMA table_info(messages)`)
+	if err != nil {
+		t.Fatalf("table info: %v", err)
+	}
+	defer rows.Close()
+
+	found := false
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			columnType string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultVal, &pk); err != nil {
+			t.Fatalf("scan table info: %v", err)
+		}
+		if name == "reasoning_content" {
+			found = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate table info: %v", err)
+	}
+	if !found {
+		t.Fatal("reasoning_content column not added to legacy messages table")
+	}
+}
+
 func TestMigrationConversationUnique(t *testing.T) {
 	db := openTestDB(t)
 	if err := runSchema(db); err != nil {

@@ -199,6 +199,29 @@ func TestStoreAddAndGetMessages(t *testing.T) {
 	}
 }
 
+func TestStoreAddAndGetMessagesWithReasoning(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	conv, _ := s.GetOrCreateConversation(ctx, "agent:reasoning")
+
+	_, err := s.AddMessageWithReasoning(ctx, conv.ConversationID, "assistant", "visible", "hidden", 5)
+	if err != nil {
+		t.Fatalf("AddMessageWithReasoning: %v", err)
+	}
+
+	msgs, err := s.GetMessages(ctx, conv.ConversationID, 10, 0)
+	if err != nil {
+		t.Fatalf("GetMessages: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("got %d messages, want 1", len(msgs))
+	}
+	if msgs[0].ReasoningContent != "hidden" {
+		t.Fatalf("ReasoningContent = %q, want %q", msgs[0].ReasoningContent, "hidden")
+	}
+}
+
 func TestStoreAddMessageWithParts(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -230,6 +253,33 @@ func TestStoreAddMessageWithParts(t *testing.T) {
 	}
 	if msgs[0].Parts[0].ToolCallID != "tc_123" {
 		t.Errorf("part[0].ToolCallID = %q, want tc_123", msgs[0].Parts[0].ToolCallID)
+	}
+}
+
+func TestStoreAddMessageWithPartsPreservesReasoning(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	conv, _ := s.GetOrCreateConversation(ctx, "agent:test")
+
+	parts := []MessagePart{
+		{Type: "tool_use", Name: "read_file", Arguments: `{"path":"/tmp/test"}`, ToolCallID: "tc_123"},
+		{Type: "text", Text: "some output"},
+	}
+	_, err := s.AddMessageWithPartsAndReasoning(ctx, conv.ConversationID, "assistant", parts, "tool thought", 10)
+	if err != nil {
+		t.Fatalf("AddMessageWithPartsAndReasoning: %v", err)
+	}
+
+	msgs, err := s.GetMessages(ctx, conv.ConversationID, 10, 0)
+	if err != nil {
+		t.Fatalf("GetMessages: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].ReasoningContent != "tool thought" {
+		t.Fatalf("ReasoningContent = %q, want %q", msgs[0].ReasoningContent, "tool thought")
 	}
 }
 
