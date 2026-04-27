@@ -1,4 +1,4 @@
-.PHONY: all build install uninstall clean help test build-all lint-docs
+.PHONY: all build install uninstall clean help test build-all lint-docs arm arm64 tui-arm tui-arm64 launcher-arm launcher-arm64
 
 # Build variables
 BINARY_NAME=picoclaw
@@ -171,7 +171,34 @@ ifeq ($(OS),Windows_NT)
 	EXT=.exe
 endif
 
-BINARY_PATH=$(BUILD_DIR)/$(BINARY_NAME)-$(PLATFORM)-$(ARCH)
+ifeq ($(PLATFORM),linux)
+	ifeq ($(ARCH),arm)
+		BUILD_GOARCH=arm
+		BUILD_GOARM=7
+		BINARY_ARCH=armv7
+	else ifeq ($(ARCH),armv7)
+		BUILD_GOARCH=arm
+		BUILD_GOARM=7
+		BINARY_ARCH=armv7
+	else ifeq ($(ARCH),armv7l)
+		BUILD_GOARCH=arm
+		BUILD_GOARM=7
+		BINARY_ARCH=armv7
+	else
+		BUILD_GOARCH=$(ARCH)
+		BINARY_ARCH=$(ARCH)
+	endif
+else
+	BUILD_GOARCH=$(ARCH)
+	BINARY_ARCH=$(ARCH)
+endif
+
+BUILD_GOENV=GOARCH=$(BUILD_GOARCH)
+ifneq ($(BUILD_GOARM),)
+BUILD_GOENV+= GOARM=$(BUILD_GOARM)
+endif
+
+BINARY_PATH=$(BUILD_DIR)/$(BINARY_NAME)-$(PLATFORM)-$(BINARY_ARCH)
 
 # Default target
 all: build
@@ -196,9 +223,14 @@ ifeq ($(OS),Windows_NT)
 	@$(POWERSHELL) "Copy-Item -LiteralPath '$(BINARY_PATH)$(EXT)' -Destination '$(BUILD_DIR)/$(BINARY_NAME)$(EXT)' -Force"
 else
 	@mkdir -p $(BUILD_DIR)
-	@GOARCH=${ARCH} $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY_PATH)$(EXT) ./$(CMD_DIR)
+	@$(BUILD_GOENV) $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY_PATH)$(EXT) ./$(CMD_DIR)
 	@echo "Build complete: $(BINARY_PATH)$(EXT)"
-	@$(LNCMD) $(BINARY_NAME)-$(PLATFORM)-$(ARCH)$(EXT) $(BUILD_DIR)/$(BINARY_NAME)$(EXT)
+ifeq ($(PLATFORM),linux)
+ifneq ($(filter $(ARCH),arm armv7 armv7l),)
+	@$(LNCMD) $(BINARY_NAME)-linux-armv7$(EXT) $(BUILD_DIR)/$(BINARY_NAME)-linux-arm$(EXT)
+endif
+endif
+	@$(LNCMD) $(BINARY_NAME)-$(PLATFORM)-$(BINARY_ARCH)$(EXT) $(BUILD_DIR)/$(BINARY_NAME)$(EXT)
 endif
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)$(EXT)"
 
@@ -232,8 +264,13 @@ ifeq ($(OS),Windows_NT)
 	@$(POWERSHELL) "Copy-Item -LiteralPath '$(BUILD_DIR)/picoclaw-launcher-tui-$(PLATFORM)-$(ARCH)$(EXT)' -Destination '$(BUILD_DIR)/picoclaw-launcher-tui$(EXT)' -Force"
 else
 	@mkdir -p $(BUILD_DIR)
-	@$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/picoclaw-launcher-tui-$(PLATFORM)-$(ARCH) ./cmd/picoclaw-launcher-tui
-	@ln -sf picoclaw-launcher-tui-$(PLATFORM)-$(ARCH) $(BUILD_DIR)/picoclaw-launcher-tui
+	@$(BUILD_GOENV) $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/picoclaw-launcher-tui-$(PLATFORM)-$(BINARY_ARCH) ./cmd/picoclaw-launcher-tui
+ifeq ($(PLATFORM),linux)
+ifneq ($(filter $(ARCH),arm armv7 armv7l),)
+	@$(LNCMD) picoclaw-launcher-tui-linux-armv7 $(BUILD_DIR)/picoclaw-launcher-tui-linux-arm
+endif
+endif
+	@$(LNCMD) picoclaw-launcher-tui-$(PLATFORM)-$(BINARY_ARCH) $(BUILD_DIR)/picoclaw-launcher-tui
 endif
 	@echo "Build complete: $(BUILD_DIR)/picoclaw-launcher-tui$(EXT)"
 
@@ -259,8 +296,9 @@ build-whatsapp-native: generate
 build-linux-arm: generate
 	@echo "Building for linux/arm (GOARM=7)..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=linux GOARCH=arm GOARM=7 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm ./$(CMD_DIR)
-	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-linux-arm"
+	GOOS=linux GOARCH=arm GOARM=7 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-armv7 ./$(CMD_DIR)
+	@$(LNCMD) $(BINARY_NAME)-linux-armv7 $(BUILD_DIR)/$(BINARY_NAME)-linux-arm
+	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-linux-armv7"
 
 ## build-linux-arm64: Build for Linux ARM64 (e.g. Raspberry Pi Zero 2 W 64-bit)
 build-linux-arm64: generate
@@ -268,6 +306,28 @@ build-linux-arm64: generate
 	@mkdir -p $(BUILD_DIR)
 	GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./$(CMD_DIR)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64"
+
+## arm: Build core for Linux ARMv7
+arm: build-linux-arm
+
+## arm64: Build core for Linux ARM64
+arm64: build-linux-arm64
+
+## tui-arm: Build launcher TUI for Linux ARMv7
+tui-arm:
+	@$(MAKE) ARCH=arm PLATFORM=linux build-launcher-tui
+
+## tui-arm64: Build launcher TUI for Linux ARM64
+tui-arm64:
+	@$(MAKE) ARCH=arm64 PLATFORM=linux build-launcher-tui
+
+## launcher-arm: Build web launcher for Linux ARMv7
+launcher-arm:
+	@$(MAKE) ARCH=arm PLATFORM=linux build-launcher
+
+## launcher-arm64: Build web launcher for Linux ARM64
+launcher-arm64:
+	@$(MAKE) ARCH=arm64 PLATFORM=linux build-launcher
 
 ## build-linux-mipsle: Build for Linux MIPS32 LE
 build-linux-mipsle: generate
@@ -319,14 +379,14 @@ build-all: generate
 	@echo "Building for multiple platforms..."
 	@mkdir -p $(BUILD_DIR)
 	GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./$(CMD_DIR)
-	GOOS=linux GOARCH=arm GOARM=7 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm ./$(CMD_DIR)
+	GOOS=linux GOARCH=arm GOARM=7 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-armv7 ./$(CMD_DIR)
+	@$(LNCMD) $(BINARY_NAME)-linux-armv7 $(BUILD_DIR)/$(BINARY_NAME)-linux-arm
 	GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./$(CMD_DIR)
 	@$(PTY_PATCH_LOONG64)
 	GOOS=linux GOARCH=loong64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-loong64 ./$(CMD_DIR)
 	GOOS=linux GOARCH=riscv64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-riscv64 ./$(CMD_DIR)
 	GOOS=linux GOARCH=mipsle GOMIPS=softfloat $(GO) build $(GOFLAGS_NO_GOOLM) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-mipsle ./$(CMD_DIR)
 	$(call PATCH_MIPS_FLAGS,$(BUILD_DIR)/$(BINARY_NAME)-linux-mipsle)
-	GOOS=linux GOARCH=arm GOARM=7 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-armv7 ./$(CMD_DIR)
 	GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./$(CMD_DIR)
 	GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./$(CMD_DIR)
 	GOOS=netbsd GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-netbsd-amd64 ./$(CMD_DIR)

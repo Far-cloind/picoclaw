@@ -143,3 +143,5 @@ require (
 )
 
 replace github.com/bwmarrin/discordgo => github.com/yeongaori/discordgo-fork v0.0.0-20260319072544-e8e546f5d532
+
+replace github.com/larksuite/oapi-sdk-go/v3 => ./third_party/larksuite/oapi-sdk-go-v3

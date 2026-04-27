@@ -1,4 +1,4 @@
-//go:build amd64 || arm64 || riscv64 || mips64 || ppc64
+//go:build amd64 || arm || arm64 || riscv64 || mips64 || ppc64
 
 package feishu
 
@@ -96,7 +96,9 @@ func (c *FeishuChannel) Start(ctx context.Context) error {
 	}
 
 	dispatcher := larkdispatcher.NewEventDispatcher(c.config.VerificationToken.String(), c.config.EncryptKey.String()).
-		OnP2MessageReceiveV1(c.handleMessageReceive)
+		OnP2MessageReceiveV1(c.handleMessageReceive).
+		OnP2MessageReactionCreatedV1(c.handleMessageReactionCreated).
+		OnP2MessageReactionDeletedV1(c.handleMessageReactionDeleted)
 
 	runCtx, cancel := context.WithCancel(ctx)
 
@@ -143,6 +145,14 @@ func (c *FeishuChannel) Stop(ctx context.Context) error {
 
 	c.SetRunning(false)
 	logger.InfoC("feishu", "Feishu channel stopped")
+	return nil
+}
+
+func (c *FeishuChannel) handleMessageReactionCreated(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
+	return nil
+}
+
+func (c *FeishuChannel) handleMessageReactionDeleted(ctx context.Context, event *larkim.P2MessageReactionDeletedV1) error {
 	return nil
 }
 
